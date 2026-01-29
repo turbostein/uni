@@ -1,0 +1,19 @@
+{
+  "name": "uni-real-learning-ai",
+  "version": "2.0.0",
+  "description": "Uni - Real Learning AI with actual training capabilities",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["ai", "learning", "semantic-network", "knowledge-graph"],
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "ws": "^8.14.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

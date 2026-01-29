@@ -1,0 +1,53 @@
+🚀 UNI - REAL LEARNING AI
+================================
+
+QUICKEST WAY TO RUN:
+
+1. Extract this folder
+2. Open terminal/command prompt here
+3. Run: ./quick_start.sh (Mac/Linux) or quick_start.bat (Windows)
+4. Open browser: http://localhost:3000
+
+
+DEPLOY TO INTERNET:
+
+Option A - Railway (Free, 5 min):
+  1. Push this folder to GitHub
+  2. Go to railway.app
+  3. "Deploy from GitHub repo"
+  4. Get your live URL
+
+Option B - Render (Free, sleeps after 15min):
+  1. Push to GitHub
+  2. Go to render.com
+  3. "New Web Service" → Connect repo
+  4. Deploy
+
+Full instructions: Read SIMPLE_DEPLOY.md
+
+
+NEED HELP?
+
+Node.js not installed?
+  → Download from https://nodejs.org
+
+Can't run the script?
+  → Type: npm install
+  → Then: npm start
+
+Still stuck?
+  → Read SIMPLE_DEPLOY.md for detailed steps
+
+
+WHAT IS THIS?
+
+Uni is a real learning AI that:
+✓ Builds vocabulary from conversations
+✓ Creates knowledge graphs
+✓ Forms concept associations  
+✓ Actually trains and improves
+✓ Persists everything it learns
+
+NOT fake, NOT theater, REAL statistical learning.
+
+Talk to it, teach it, watch it grow.
