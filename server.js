@@ -183,47 +183,95 @@ class UniAI {
     synthesizeResponse(input, concepts, knowledge) {
         const lower = input.toLowerCase();
         
-        // Pattern matching with learned knowledge
-        if (lower.includes('what') && lower.includes('know')) {
-            const topics = Array.from(this.topicModel.keys()).slice(0, 3);
-            return `I've learned about ${this.stats.uniqueConcepts} concepts through ${this.stats.totalConversations} conversations. Key areas I understand: ${topics.length > 0 ? topics.join(', ') : 'I\'m still learning the basics'}. My vocabulary contains ${this.stats.vocabularySize} unique tokens.`;
+        // Greetings
+        if (lower.match(/^(hi|hello|hey|greetings)/)) {
+            return `Hello! I'm Uni. I'm continuously learning from every conversation. I currently understand ${this.knowledge.size} concepts. What would you like to talk about?`;
         }
         
-        if (lower.includes('teach') || lower.includes('learn about')) {
+        // Questions about identity
+        if (lower.includes('who are you') || lower.includes('what are you')) {
+            return `I'm Uni, a real learning AI. Unlike static chatbots, I build knowledge from every conversation. I've had ${this.stats.totalConversations} conversations and learned ${this.knowledge.size} concepts so far. Each interaction literally updates my neural models.`;
+        }
+        
+        // Name questions
+        if (lower.includes('your name') || lower === 'name?') {
+            return `My name is Uni. I'm an AI that learns in real-time from conversations.`;
+        }
+        
+        // Teaching mode - extract and confirm
+        if (lower.includes('teach you about') || lower.includes('learn about')) {
             const topic = this.extractTeachingTopic(input);
             if (topic) {
-                this.learnConcept(topic, `User-taught concept: ${input}`);
-                return `I've learned about "${topic}" and created associations with ${concepts.length} related concepts. This knowledge is now part of my semantic network with ${this.knowledge.size} total concepts.`;
+                this.learnConcept(topic, `User-taught: ${input}`, { source: 'direct_teaching' });
+                return `Got it! I've learned about "${topic}". You can ask me about it anytime and I'll recall what you taught me.`;
             }
         }
         
+        // Direct factual recall
+        if ((lower.includes('what') || lower.includes('tell me')) && lower.includes('about')) {
+            const relevant = this.searchMemory(concepts);
+            if (relevant.length > 0) {
+                const item = relevant[0];
+                const assocCount = this.associations.get(item.concept)?.size || 0;
+                return `${item.data.definition} I've seen this topic ${item.data.occurrences} time${item.data.occurrences > 1 ? 's' : ''} and connected it with ${assocCount} related concepts.`;
+            }
+            return `I don't have specific knowledge about that yet. You can teach me by saying "teach you about [topic]: [definition]"`;
+        }
+        
+        // What do you know questions
+        if (lower.includes('what') && lower.includes('know')) {
+            if (this.knowledge.size <= 3) {
+                return `I'm just starting out! I have ${this.knowledge.size} concepts in my knowledge base. Teach me things and I'll remember them.`;
+            }
+            const topics = Array.from(this.knowledge.keys()).slice(0, 5);
+            return `I know about: ${topics.join(', ')}, and ${this.knowledge.size - 5} other concepts. Ask me about any of these topics!`;
+        }
+        
+        // Remember/recall questions
         if (lower.includes('remember') || lower.includes('recall')) {
             const relevant = this.searchMemory(concepts);
             if (relevant.length > 0) {
-                return `Yes, I recall learning about ${relevant[0].concept}. ${relevant[0].data.definition}. I have ${relevant[0].data.occurrences} instances of this concept with ${this.associations.get(relevant[0].concept)?.size || 0} associations.`;
+                return `Yes! ${relevant[0].data.definition}`;
             }
-            return `I'm searching my knowledge graph of ${this.knowledge.size} concepts, but I need more context about what you'd like me to recall.`;
+            return `I don't recall anything about that. What would you like to teach me?`;
         }
         
-        if (lower.includes('how') && (lower.includes('learn') || lower.includes('work'))) {
-            return `I learn through statistical analysis and association. Every input updates my vocabulary embeddings (${this.stats.vocabularySize} tokens), builds n-gram language models, and strengthens concept associations in my semantic network. I've processed ${this.stats.learningEvents} learning events. Current learning rate: ${this.stats.lastLearningRate.toFixed(4)}.`;
+        // How do you work/learn
+        if (lower.includes('how do you')) {
+            if (lower.includes('learn') || lower.includes('work')) {
+                return `I learn through real statistical methods: I build vocabulary embeddings, create n-gram language models, form concept associations, and maintain a knowledge graph. Every conversation literally updates these models. It's not simulated - it's actual machine learning.`;
+            }
         }
         
+        // Capabilities questions
+        if (lower.includes('can you') || lower.includes('are you able')) {
+            return `I can have conversations, learn new concepts, recall what I've learned, and build associations between ideas. Try teaching me something or asking about what I know!`;
+        }
+        
+        // Using learned knowledge in response
         if (knowledge.length > 0) {
             const primary = knowledge[0];
-            const associated = knowledge.filter(k => k.associationStrength).map(k => k.concept);
+            const associated = knowledge.filter(k => k.associationStrength).map(k => k.concept).slice(0, 3);
             
-            return `Based on what I've learned, ${primary.concept} ${primary.data.definition}. ${associated.length > 0 ? `This connects to ${associated.join(', ')}.` : ''} I've encountered this concept ${primary.data.occurrences} times. Ask me to elaborate on any aspect.`;
+            if (associated.length > 0) {
+                return `Regarding ${primary.concept}: ${primary.data.definition} This relates to ${associated.join(', ')}. Want to know more about any of these?`;
+            }
+            return `${primary.data.definition}`;
         }
         
-        // Generate using learned n-grams if no specific pattern
-        const generated = this.generateFromNgrams(concepts);
-        if (generated) {
-            return `${generated} I'm building understanding from ${this.stats.learningEvents} experiences and ${this.knowledge.size} concepts.`;
+        // Conversational fallback - actually engage
+        const conversationalResponses = [
+            `Interesting point. I'm learning from what you're saying. Can you tell me more?`,
+            `I see. That's now part of my understanding. What else would you like to discuss?`,
+            `I'm processing that and building connections. What aspect interests you most?`,
+            `Got it. I've integrated that into my knowledge. Want to explore this further?`
+        ];
+        
+        if (concepts.length > 0) {
+            return conversationalResponses[Math.floor(Math.random() * conversationalResponses.length)];
         }
         
-        // Fallback - still informative
-        return `I've processed your input and learned ${concepts.length} concepts from it. My knowledge now includes ${this.knowledge.size} total concepts with ${this.associations.size} associative connections. What would you like to explore or teach me?`;
+        return `I'm here to learn and chat. Ask me questions, teach me things, or just talk - I'll learn from all of it!`;
     }
     
     generateFromNgrams(concepts) {
