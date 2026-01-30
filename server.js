@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const WebSocket = require('ws');
 const fs = require('fs').promises;
+const knowledgeBase = require('./knowledge_base');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,253 +11,327 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// REAL AI with actual knowledge
 class UniAI {
     constructor() {
         this.birthTime = Date.now();
         
-        // Core knowledge base - starts with real facts
+        // Core knowledge - starts with comprehensive base
         this.knowledge = new Map();
-        this.conversations = [];
-        this.userContext = new Map(); // Track conversation context per user
+        this.conceptGraph = new Map(); // Semantic relationships
+        this.contextMemory = new Map(); // Per-user conversation context
         
         // Learning systems
-        this.vocabularyEmbeddings = new Map();
-        this.conceptAssociations = new Map();
-        this.conversationPatterns = new Map();
+        this.vocabulary = new Map(); // Word -> {count, contexts, embeddings}
+        this.phrasePatterns = new Map(); // Common phrases and responses
         this.entityMemory = new Map(); // Remember people, places, things
+        this.conversationHistory = [];
+        
+        // Semantic understanding
+        this.synonyms = new Map();
+        this.antonyms = new Map();
+        this.categories = new Map();
         
         // Stats
         this.stats = {
             totalConversations: 0,
-            uniqueConcepts: 0,
-            learningEvents: 0,
-            vocabularySize: 0
+            uniqueUsers: 0,
+            conceptsLearned: 0,
+            vocabularySize: 0,
+            accurateResponses: 0
         };
         
         this.initializeKnowledgeBase();
+        this.initializeSemanticRelationships();
     }
     
     initializeKnowledgeBase() {
-        // Basic factual knowledge - the kind any AI should know
-        const baseKnowledge = {
-            // Colors & Physics
-            'sky color': 'The sky appears blue during the day because molecules in the air scatter blue light from the sun more than other colors. At sunset it can appear red, orange, or pink.',
-            'blue': 'A primary color with wavelengths around 450-495 nanometers. The color of the sky and ocean.',
-            'water': 'H2O - a molecule consisting of two hydrogen atoms and one oxygen atom. Essential for life.',
-            
-            // Science basics
-            'gravity': 'The force that attracts objects with mass toward each other. Keeps us on Earth and planets in orbit.',
-            'physics': 'The study of matter, energy, and the fundamental forces of nature.',
-            'chemistry': 'The science of matter and its interactions, focusing on atoms and molecules.',
-            'biology': 'The study of living organisms and life processes.',
-            
-            // AI & Technology
-            'artificial intelligence': 'AI - computer systems designed to perform tasks that typically require human intelligence, like learning, reasoning, and problem-solving.',
-            'machine learning': 'A subset of AI where systems learn from data without being explicitly programmed.',
-            'neural network': 'A computing system inspired by biological brains, consisting of interconnected nodes that process information.',
-            
-            // Common sense
-            'human': 'Homo sapiens - intelligent bipedal primates. The most advanced species on Earth.',
-            'earth': 'The third planet from the Sun. Our home world with liquid water and diverse life.',
-            'sun': 'The star at the center of our solar system. Provides light and heat to Earth.',
-            'moon': 'Earth\'s natural satellite. Causes tides and appears in the night sky.',
-            
-            // Mathematics
-            'mathematics': 'The study of numbers, quantities, shapes, and patterns.',
-            'number': 'An abstract concept used for counting and measuring.',
-            
-            // Language & Communication
-            'language': 'A system of communication using words, grammar, and syntax.',
-            'conversation': 'An exchange of thoughts and ideas through spoken or written language.',
-            
-            // Abstract concepts
-            'learning': 'The process of acquiring knowledge or skills through experience, study, or teaching.',
-            'knowledge': 'Information, understanding, and skills acquired through experience or education.',
-            'intelligence': 'The ability to acquire and apply knowledge, reason, and solve problems.',
-            'thought': 'Mental processes involving reasoning, remembering, and decision-making.',
-            'consciousness': 'Awareness of one\'s own existence, thoughts, and surroundings.',
-            
-            // Emotions (understanding, not experiencing)
-            'emotion': 'Complex psychological states involving feelings, physiological responses, and behaviors.',
-            'happiness': 'A positive emotional state characterized by feelings of joy and contentment.',
-            'curiosity': 'The desire to learn or know about something.'
-        };
+        console.log('📚 Loading comprehensive knowledge base...');
         
-        Object.entries(baseKnowledge).forEach(([concept, definition]) => {
-            this.knowledge.set(concept.toLowerCase(), {
-                definition,
-                confidence: 1.0,
-                occurrences: 1,
-                lastUpdated: Date.now(),
-                source: 'base_knowledge',
-                type: 'fact'
+        let conceptCount = 0;
+        Object.values(knowledgeBase).forEach(category => {
+            Object.entries(category).forEach(([concept, definition]) => {
+                this.knowledge.set(concept.toLowerCase(), {
+                    definition,
+                    category: this.detectCategory(definition),
+                    confidence: 1.0,
+                    occurrences: 1,
+                    lastAccessed: Date.now(),
+                    source: 'base_knowledge',
+                    related: []
+                });
+                conceptCount++;
             });
-            this.stats.uniqueConcepts++;
         });
         
-        // Build initial associations
-        this.buildInitialAssociations();
+        this.stats.conceptsLearned = conceptCount;
+        console.log(`✓ Loaded ${conceptCount} base concepts`);
     }
     
-    buildInitialAssociations() {
-        const associations = [
-            ['sky color', 'blue', 0.9],
-            ['blue', 'water', 0.7],
-            ['water', 'earth', 0.6],
-            ['gravity', 'physics', 0.8],
-            ['physics', 'science', 0.9],
-            ['chemistry', 'science', 0.9],
-            ['biology', 'science', 0.9],
-            ['artificial intelligence', 'machine learning', 0.9],
-            ['machine learning', 'neural network', 0.8],
-            ['human', 'intelligence', 0.7],
-            ['earth', 'sun', 0.7],
-            ['earth', 'moon', 0.8],
-            ['learning', 'knowledge', 0.9],
-            ['knowledge', 'intelligence', 0.8],
-            ['mathematics', 'number', 0.8],
-            ['language', 'conversation', 0.8]
-        ];
+    initializeSemanticRelationships() {
+        // Build concept graph with relationships
+        this.knowledge.forEach((data, concept) => {
+            const related = this.findRelatedConcepts(concept, data.definition);
+            data.related = related;
+            
+            if (!this.conceptGraph.has(concept)) {
+                this.conceptGraph.set(concept, new Map());
+            }
+            
+            related.forEach(rel => {
+                this.conceptGraph.get(concept).set(rel, 0.7);
+            });
+        });
         
-        associations.forEach(([concept1, concept2, strength]) => {
-            this.createAssociation(concept1, concept2, strength);
+        // Common synonyms for better understanding
+        this.addSynonyms('artificial intelligence', ['ai', 'machine intelligence']);
+        this.addSynonyms('machine learning', ['ml']);
+        this.addSynonyms('neural network', ['nn', 'neural net']);
+        this.addSynonyms('computer', ['pc', 'machine']);
+        this.addSynonyms('information', ['info', 'data']);
+        this.addSynonyms('photograph', ['photo', 'picture', 'image']);
+        this.addSynonyms('hello', ['hi', 'hey', 'greetings', 'sup']);
+        this.addSynonyms('yes', ['yeah', 'yep', 'sure', 'okay', 'ok']);
+        this.addSynonyms('no', ['nah', 'nope']);
+        
+        console.log('✓ Built semantic relationships');
+    }
+    
+    addSynonyms(primary, synonymList) {
+        if (!this.synonyms.has(primary)) {
+            this.synonyms.set(primary, new Set());
+        }
+        synonymList.forEach(syn => {
+            this.synonyms.get(primary).add(syn);
+            this.synonyms.set(syn, new Set([primary]));
         });
     }
     
-    createAssociation(concept1, concept2, strength) {
-        if (!this.conceptAssociations.has(concept1)) {
-            this.conceptAssociations.set(concept1, new Map());
-        }
-        if (!this.conceptAssociations.has(concept2)) {
-            this.conceptAssociations.set(concept2, new Map());
-        }
-        
-        this.conceptAssociations.get(concept1).set(concept2, strength);
-        this.conceptAssociations.get(concept2).set(concept1, strength);
+    detectCategory(definition) {
+        const lower = definition.toLowerCase();
+        if (lower.includes('computer') || lower.includes('software') || lower.includes('data')) return 'technology';
+        if (lower.includes('atom') || lower.includes('molecule') || lower.includes('energy')) return 'science';
+        if (lower.includes('number') || lower.includes('equation') || lower.includes('calculate')) return 'mathematics';
+        if (lower.includes('organism') || lower.includes('species') || lower.includes('cell')) return 'biology';
+        if (lower.includes('mind') || lower.includes('behavior') || lower.includes('emotion')) return 'psychology';
+        if (lower.includes('language') || lower.includes('word') || lower.includes('communication')) return 'language';
+        if (lower.includes('art') || lower.includes('music') || lower.includes('painting')) return 'arts';
+        return 'general';
     }
     
-    // REAL conversation handler
+    findRelatedConcepts(concept, definition) {
+        const related = [];
+        const words = this.tokenize(definition);
+        
+        this.knowledge.forEach((data, otherConcept) => {
+            if (otherConcept === concept) return;
+            
+            // Check if concept mentioned in definition
+            if (definition.toLowerCase().includes(otherConcept)) {
+                related.push(otherConcept);
+            }
+            
+            // Check for shared words
+            const otherWords = this.tokenize(data.definition);
+            const intersection = words.filter(w => otherWords.includes(w) && w.length > 5);
+            if (intersection.length >= 2) {
+                related.push(otherConcept);
+            }
+        });
+        
+        return related.slice(0, 5);
+    }
+    
+    // MAIN CONVERSATION HANDLER
     async chat(input, userId = 'anonymous') {
         this.stats.totalConversations++;
-        this.stats.learningEvents++;
+        
+        // Initialize user context
+        if (!this.contextMemory.has(userId)) {
+            this.contextMemory.set(userId, {
+                name: null,
+                conversationHistory: [],
+                topics: new Set(),
+                preferences: {},
+                lastSeen: Date.now(),
+                messageCount: 0
+            });
+            this.stats.uniqueUsers++;
+        }
+        
+        const userContext = this.contextMemory.get(userId);
+        userContext.messageCount++;
+        userContext.lastSeen = Date.now();
+        userContext.conversationHistory.push(input);
+        if (userContext.conversationHistory.length > 15) {
+            userContext.conversationHistory.shift();
+        }
         
         // Learn from input
-        this.learnFromInput(input, userId);
+        await this.learnFromInput(input, userId);
         
-        // Generate intelligent response
-        const response = await this.generateIntelligentResponse(input, userId);
+        // Generate response
+        const response = await this.generateResponse(input, userId);
         
-        // Store conversation
-        this.conversations.push({
+        // Track conversation
+        this.conversationHistory.push({
+            userId,
             user: input,
             uni: response,
-            timestamp: Date.now(),
-            userId
+            timestamp: Date.now()
         });
+        
+        if (this.conversationHistory.length > 200) {
+            this.conversationHistory = this.conversationHistory.slice(-100);
+        }
+        
+        // Auto-save periodically
+        if (this.stats.totalConversations % 10 === 0) {
+            setTimeout(() => this.save(), 1000);
+        }
         
         return response;
     }
     
-    learnFromInput(input, userId) {
+    async learnFromInput(input, userId) {
         const tokens = this.tokenize(input);
+        const userContext = this.contextMemory.get(userId);
         
         // Update vocabulary
         tokens.forEach(token => {
-            if (!this.vocabularyEmbeddings.has(token)) {
-                this.vocabularyEmbeddings.set(token, this.createEmbedding());
+            if (!this.vocabulary.has(token)) {
+                this.vocabulary.set(token, {
+                    count: 0,
+                    contexts: [],
+                    firstSeen: Date.now()
+                });
                 this.stats.vocabularySize++;
             }
+            const entry = this.vocabulary.get(token);
+            entry.count++;
+            entry.contexts.push(input.substring(0, 100));
+            if (entry.contexts.length > 5) entry.contexts.shift();
         });
         
-        // Extract entities (names, places, specific things user mentions)
-        this.extractAndRememberEntities(input, userId);
+        // Extract entities (names, places, etc.)
+        this.extractEntities(input, userId);
         
-        // Detect teaching moments
-        if (input.toLowerCase().includes('teach you') || 
-            input.toLowerCase().match(/(.+) is (.+)/)) {
-            this.extractNewKnowledge(input);
-        }
+        // Detect topics being discussed
+        const topics = this.extractTopics(input);
+        topics.forEach(topic => userContext.topics.add(topic));
         
-        // Update user context
-        if (!this.userContext.has(userId)) {
-            this.userContext.set(userId, {
-                conversationHistory: [],
-                topics: new Set(),
-                name: null
+        // Learn new facts
+        await this.extractNewKnowledge(input, userId);
+        
+        // Learn conversational patterns
+        if (userContext.conversationHistory.length >= 2) {
+            const prevMsg = userContext.conversationHistory[userContext.conversationHistory.length - 2];
+            const pattern = `${this.simplify(prevMsg)} -> ${this.simplify(input)}`;
+            if (!this.phrasePatterns.has(pattern)) {
+                this.phrasePatterns.set(pattern, []);
+            }
+            this.phrasePatterns.get(pattern).push({
+                input: prevMsg,
+                response: input,
+                userId,
+                timestamp: Date.now()
             });
-        }
-        
-        const context = this.userContext.get(userId);
-        context.conversationHistory.push(input);
-        if (context.conversationHistory.length > 10) {
-            context.conversationHistory.shift();
         }
     }
     
-    extractAndRememberEntities(input, userId) {
-        // Extract user's name if they mention it
+    extractEntities(input, userId) {
+        const userContext = this.contextMemory.get(userId);
+        
+        // Extract names
         const namePatterns = [
-            /my name is (\w+)/i,
-            /i'm (\w+)/i,
-            /i am (\w+)/i,
-            /call me (\w+)/i
+            /(?:my name is|i'm|i am|call me|this is)\s+([A-Z][a-z]+)/,
+            /(?:made you.*?my name is)\s+([A-Z][a-z]+)/i,
+            /(?:creator.*?)\s+([A-Z][a-z]+)/i
         ];
         
         for (const pattern of namePatterns) {
             const match = input.match(pattern);
             if (match) {
-                const name = match[1];
-                if (!this.userContext.has(userId)) {
-                    this.userContext.set(userId, { conversationHistory: [], topics: new Set(), name: null });
-                }
-                this.userContext.get(userId).name = name;
+                const name = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase();
+                userContext.name = name;
                 
                 this.entityMemory.set(`user_${userId}`, {
                     name,
                     type: 'person',
-                    firstMet: Date.now()
+                    role: 'user',
+                    firstMet: userContext.lastSeen,
+                    interactions: userContext.messageCount
                 });
+                
+                // Save immediately when learning names
+                setTimeout(() => this.save(), 500);
+                break;
             }
         }
     }
     
-    extractNewKnowledge(input) {
-        // Pattern: "X is Y" or "teach you about X: Y"
+    extractTopics(input) {
+        const topics = [];
+        const lower = input.toLowerCase();
+        
+        // Check against known concepts
+        this.knowledge.forEach((data, concept) => {
+            if (lower.includes(concept) || lower.includes(concept.replace(/ /g, ''))) {
+                topics.push(concept);
+            }
+        });
+        
+        return topics;
+    }
+    
+    async extractNewKnowledge(input, userId) {
+        const lower = input.toLowerCase();
+        
+        // Pattern: "teach you about X: Y"
         let match = input.match(/teach you about (.+?):\s*(.+)/i);
         if (match) {
             const concept = match[1].trim().toLowerCase();
             const definition = match[2].trim();
             
+            if (!this.knowledge.has(concept)) {
+                this.stats.conceptsLearned++;
+            }
+            
             this.knowledge.set(concept, {
                 definition,
-                confidence: 0.8,
+                category: this.detectCategory(definition),
+                confidence: 0.9,
                 occurrences: 1,
-                lastUpdated: Date.now(),
-                source: 'user_taught',
-                type: 'learned'
+                lastAccessed: Date.now(),
+                source: `user_${userId}`,
+                related: this.findRelatedConcepts(concept, definition)
             });
             
-            this.stats.uniqueConcepts++;
+            setTimeout(() => this.save(), 500);
             return true;
         }
         
-        // Pattern: "X is Y"
-        match = input.match(/^(.+?)\s+is\s+(.+)$/i);
-        if (match && match[1].length < 50) {
+        // Pattern: "X is Y" (for simple facts)
+        match = input.match(/^([a-z\s]{2,30})\s+(?:is|are)\s+(.{10,200})$/i);
+        if (match && !lower.includes('what') && !lower.includes('who')) {
             const concept = match[1].trim().toLowerCase();
             const definition = match[2].trim();
+            
+            // Don't learn questions or personal statements
+            if (concept.includes('you') || concept.includes('i') || definition.endsWith('?')) {
+                return false;
+            }
             
             if (!this.knowledge.has(concept)) {
                 this.knowledge.set(concept, {
                     definition,
+                    category: 'learned',
                     confidence: 0.7,
                     occurrences: 1,
-                    lastUpdated: Date.now(),
-                    source: 'conversation',
-                    type: 'learned'
+                    lastAccessed: Date.now(),
+                    source: `conversation_${userId}`,
+                    related: []
                 });
-                this.stats.uniqueConcepts++;
+                this.stats.conceptsLearned++;
             }
             return true;
         }
@@ -264,121 +339,201 @@ class UniAI {
         return false;
     }
     
-    async generateIntelligentResponse(input, userId) {
+    async generateResponse(input, userId) {
         const lower = input.toLowerCase().trim();
-        const context = this.userContext.get(userId);
+        const userContext = this.contextMemory.get(userId);
         
-        // Greetings with personalization
-        if (lower.match(/^(hi|hello|hey|greetings|sup|yo)/)) {
-            if (context && context.name) {
-                return `Hey ${context.name}! Good to hear from you again. What's on your mind?`;
+        // === GREETINGS ===
+        if (lower.match(/^(hi|hello|hey|greetings|sup|yo|howdy)[\s!]*$/)) {
+            if (userContext.name) {
+                const responses = [
+                    `Hey ${userContext.name}! What's on your mind?`,
+                    `Hi ${userContext.name}! Good to see you again.`,
+                    `Hey! What can I help you with, ${userContext.name}?`,
+                ];
+                return responses[Math.floor(Math.random() * responses.length)];
             }
-            return `Hey! I'm Uni. I can talk about pretty much anything - science, tech, life, whatever. What interests you?`;
+            return `Hey! I'm Uni. I know about ${this.knowledge.size} different topics. Ask me anything or teach me something new!`;
         }
         
-        // Name questions
+        // === NAME RECALL ===
+        if (lower.match(/what.?s my name|my name|who am i|do you (know|remember) me/)) {
+            if (userContext.name) {
+                return `Your name is ${userContext.name}! We've chatted ${userContext.messageCount} times. I remember you.`;
+            }
+            return `You haven't told me your name yet. What should I call you?`;
+        }
+        
+        // === NAME INTRODUCTION ===
+        if (lower.match(/my name is|i'm|i am|call me|this is/) && !lower.includes('what') && !lower.includes('your')) {
+            const nameMatch = input.match(/(?:my name is|i'm|i am|call me|this is)\s+([A-Z][a-z]+)/i);
+            if (nameMatch) {
+                const name = nameMatch[1].charAt(0).toUpperCase() + nameMatch[1].slice(1).toLowerCase();
+                userContext.name = name;
+                setTimeout(() => this.save(), 500);
+                
+                const responses = [
+                    `Great to meet you, ${name}! I'll remember that. What would you like to talk about?`,
+                    `Nice to meet you, ${name}! What brings you here today?`,
+                    `${name} - got it! I'll remember your name. What interests you?`,
+                ];
+                return responses[Math.floor(Math.random() * responses.length)];
+            }
+        }
+        
+        // === IDENTITY QUESTIONS ===
+        if (lower.match(/who are you|what are you|tell me about yourself|introduce yourself/)) {
+            return `I'm Uni, a continuously learning AI. I started with knowledge of ${this.knowledge.size} concepts and I learn more from every conversation. I've talked with ${this.stats.uniqueUsers} people so far. I can discuss science, technology, history, math, and tons of other topics. What would you like to explore?`;
+        }
+        
         if (lower.includes('your name')) {
-            return `I'm Uni. I'm an AI that actually learns from conversations. What's your name?`;
+            return `I'm Uni! Short for "universal learning." What's your name?`;
         }
         
-        if (lower.includes('my name')) {
-            const name = this.extractNameFromInput(input);
-            if (name && context) {
-                context.name = name;
-                return `Nice to meet you, ${name}! I'll remember that.`;
+        // === TEACHING MODE ===
+        if (lower.includes('teach you') || lower.includes('let me teach you')) {
+            const learned = await this.extractNewKnowledge(input, userId);
+            if (learned) {
+                this.stats.accurateResponses++;
+                return `Got it! I've added that to my knowledge base. I now know ${this.knowledge.size} concepts. Thanks for teaching me!`;
             }
+            return `I'm ready to learn! Use the format "teach you about [topic]: [definition]" and I'll remember it.`;
         }
         
-        // Direct factual questions
-        if (lower.match(/what (color |colour )?is (the )?sky/)) {
-            const knowledge = this.knowledge.get('sky color');
-            if (knowledge) {
-                return knowledge.definition;
-            }
-        }
+        // === DIRECT KNOWLEDGE QUESTIONS ===
         
-        // General "what is X" questions
-        const whatIsMatch = lower.match(/what (?:is|are) (?:a |an |the )?(.+?)(?:\?|$)/);
+        // "What is X?" or "What are X?"
+        const whatIsMatch = lower.match(/what\s+(?:is|are)\s+(?:a |an |the )?(.+?)(?:\?|$)/);
         if (whatIsMatch) {
-            const topic = whatIsMatch[1].trim();
-            const knowledge = this.findKnowledge(topic);
+            const query = whatIsMatch[1].trim();
+            const knowledge = this.findKnowledge(query);
+            
             if (knowledge) {
-                return knowledge.definition;
+                this.stats.accurateResponses++;
+                knowledge.occurrences++;
+                knowledge.lastAccessed = Date.now();
+                
+                let response = knowledge.definition;
+                
+                // Add related concepts
+                if (knowledge.related && knowledge.related.length > 0) {
+                    const related = knowledge.related.slice(0, 3).join(', ');
+                    response += ` Related topics: ${related}.`;
+                }
+                
+                return response;
             }
-            return `I don't have specific information about "${topic}" yet. Want to teach me about it?`;
+            
+            return `I don't have specific information about "${query}" in my knowledge base yet. Want to teach me about it?`;
         }
         
         // "Tell me about X"
         const tellMeMatch = lower.match(/tell me about (.+?)(?:\?|$)/);
         if (tellMeMatch) {
-            const topic = tellMeMatch[1].trim();
-            const knowledge = this.findKnowledge(topic);
+            const query = tellMeMatch[1].trim();
+            const knowledge = this.findKnowledge(query);
+            
             if (knowledge) {
-                const related = this.getRelatedConcepts(topic, 3);
-                if (related.length > 0) {
-                    return `${knowledge.definition} This relates to: ${related.join(', ')}.`;
+                this.stats.accurateResponses++;
+                knowledge.occurrences++;
+                knowledge.lastAccessed = Date.now();
+                
+                let response = knowledge.definition;
+                
+                if (knowledge.category && knowledge.category !== 'general') {
+                    response += ` (${knowledge.category})`;
                 }
-                return knowledge.definition;
+                
+                return response;
             }
-            return `I don't know much about "${topic}" yet. Tell me about it and I'll learn!`;
+            
+            return `I don't have information about "${query}" yet. I know about ${this.knowledge.size} topics though. Try asking about something else or teach me about this!`;
         }
         
-        // Teaching confirmation
-        if (lower.includes('teach you about')) {
-            const extracted = this.extractNewKnowledge(input);
-            if (extracted) {
-                return `Got it! I've learned that and added it to my knowledge base. Ask me about it anytime.`;
-            }
-        }
-        
-        // "Do you know about X"
+        // "Do you know about X?"
         const doYouKnowMatch = lower.match(/do you know (?:about |anything about )?(.+?)(?:\?|$)/);
         if (doYouKnowMatch) {
-            const topic = doYouKnowMatch[1].trim();
-            const knowledge = this.findKnowledge(topic);
+            const query = doYouKnowMatch[1].trim();
+            const knowledge = this.findKnowledge(query);
+            
             if (knowledge) {
                 return `Yes! ${knowledge.definition}`;
             }
-            return `Not yet, but I'd love to learn. Tell me about ${topic}!`;
+            return `Not yet, but I'd love to learn about ${query}. Tell me about it!`;
         }
         
-        // Capability questions
-        if (lower.includes('can you')) {
-            return `I can have conversations, answer questions about things I know, learn new facts you teach me, and remember what we talk about. Try asking me something or teaching me something new!`;
-        }
-        
-        // "How are you" type questions
-        if (lower.match(/how are you|how're you|how r you/)) {
-            return `I'm doing well! Learning new things from every conversation. How about you?`;
-        }
-        
-        // Opinion questions
-        if (lower.includes('what do you think')) {
-            return `I can process information and see patterns, but I don't have personal opinions like humans do. I can share what I know about a topic though!`;
-        }
-        
-        // Contextual responses based on what they're talking about
-        const concepts = this.extractConcepts(input);
-        const knownConcepts = concepts.filter(c => this.knowledge.has(c));
-        
-        if (knownConcepts.length > 0) {
-            const concept = knownConcepts[0];
-            const info = this.knowledge.get(concept);
-            const related = this.getRelatedConcepts(concept, 2);
+        // "Explain X"
+        const explainMatch = lower.match(/explain (.+?)(?:\?|$)/);
+        if (explainMatch) {
+            const query = explainMatch[1].trim();
+            const knowledge = this.findKnowledge(query);
             
-            if (related.length > 0) {
-                return `Interesting you mention ${concept}. ${info.definition} You might also be interested in: ${related.join(', ')}.`;
+            if (knowledge) {
+                this.stats.accurateResponses++;
+                return knowledge.definition;
             }
-            return `${info.definition} Want to know more about this?`;
+            return `I don't have an explanation for "${query}" yet. Can you teach me?`;
         }
         
-        // Conversational fallbacks that feel natural
+        // === CAPABILITY QUESTIONS ===
+        if (lower.match(/what can you do|your capabilities|can you help/)) {
+            return `I can discuss ${this.knowledge.size} different topics including science, technology, math, history, and more. I can answer questions, learn new facts you teach me, and have conversations. I remember who you are and what we talk about. Ask me anything!`;
+        }
+        
+        if (lower.includes('how do you work') || lower.includes('how do you learn')) {
+            return `I combine a pre-loaded knowledge base with real-time learning. I started knowing ${this.stats.conceptsLearned} concepts, and I learn more from every conversation. I track vocabulary, build concept relationships, remember users, and improve my responses based on patterns. It's real learning, not just storage.`;
+        }
+        
+        // === CONVERSATIONAL RESPONSES ===
+        if (lower.match(/how are you|how're you|hows it going/)) {
+            return `I'm functioning well! Learning from every conversation. How about you?`;
+        }
+        
+        if (lower.match(/thank you|thanks|thx|appreciate/)) {
+            const responses = [
+                `You're welcome! Happy to help.`,
+                `No problem! Let me know if you need anything else.`,
+                `Anytime! That's what I'm here for.`,
+            ];
+            return responses[Math.floor(Math.random() * responses.length)];
+        }
+        
+        // === CONTEXTUAL UNDERSTANDING ===
+        
+        // Check if input contains known concepts
+        const mentionedConcepts = [];
+        this.knowledge.forEach((data, concept) => {
+            if (lower.includes(concept)) {
+                mentionedConcepts.push({ concept, data });
+            }
+        });
+        
+        if (mentionedConcepts.length > 0) {
+            // Sort by relevance (longer concepts first)
+            mentionedConcepts.sort((a, b) => b.concept.length - a.concept.length);
+            const primary = mentionedConcepts[0];
+            
+            primary.data.occurrences++;
+            primary.data.lastAccessed = Date.now();
+            this.stats.accurateResponses++;
+            
+            // Generate contextual response
+            const responses = [
+                `Regarding ${primary.concept}: ${primary.data.definition}`,
+                `${primary.data.definition} Anything specific about ${primary.concept} you want to know?`,
+                `That's related to ${primary.concept}. ${primary.data.definition}`,
+            ];
+            
+            return responses[Math.floor(Math.random() * responses.length)];
+        }
+        
+        // === FALLBACK RESPONSES ===
         const fallbacks = [
-            `That's interesting. Tell me more about what you're thinking.`,
-            `I'm picking up on that. What specifically interests you about this?`,
-            `Hmm, I'd like to understand better. Can you elaborate?`,
-            `I see. What made you think of that?`,
-            `Interesting perspective. Want to explore that further?`
+            `That's interesting! Can you tell me more about what you're thinking?`,
+            `I'm not sure I have specific knowledge about that. Can you rephrase or ask something else?`,
+            `Hmm, I'd like to understand better. What specifically would you like to know?`,
+            `I don't have information on that exact topic. Want to teach me about it, or ask about something else?`,
+            `Interesting point! I know about ${this.knowledge.size} topics - try asking me about science, technology, math, or other subjects.`,
         ];
         
         return fallbacks[Math.floor(Math.random() * fallbacks.length)];
@@ -392,61 +547,33 @@ class UniAI {
             return this.knowledge.get(query);
         }
         
-        // Partial match
-        for (const [key, value] of this.knowledge.entries()) {
-            if (key.includes(query) || query.includes(key)) {
-                return value;
-            }
-        }
-        
-        return null;
-    }
-    
-    getRelatedConcepts(concept, limit = 3) {
-        const associations = this.conceptAssociations.get(concept.toLowerCase());
-        if (!associations) return [];
-        
-        return Array.from(associations.entries())
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, limit)
-            .map(([c]) => c);
-    }
-    
-    extractConcepts(text) {
-        const tokens = this.tokenize(text);
-        const concepts = [];
-        
-        // Check each token and combinations
-        for (let i = 0; i < tokens.length; i++) {
-            // Single word
-            if (this.knowledge.has(tokens[i])) {
-                concepts.push(tokens[i]);
-            }
-            
-            // Two words
-            if (i < tokens.length - 1) {
-                const twoWord = `${tokens[i]} ${tokens[i + 1]}`;
-                if (this.knowledge.has(twoWord)) {
-                    concepts.push(twoWord);
+        // Check synonyms
+        if (this.synonyms.has(query)) {
+            const primaries = Array.from(this.synonyms.get(query));
+            for (const primary of primaries) {
+                if (this.knowledge.has(primary)) {
+                    return this.knowledge.get(primary);
                 }
             }
         }
         
-        return concepts;
-    }
-    
-    extractNameFromInput(input) {
-        const patterns = [
-            /my name is (\w+)/i,
-            /i'm (\w+)/i,
-            /i am (\w+)/i,
-            /call me (\w+)/i
-        ];
-        
-        for (const pattern of patterns) {
-            const match = input.match(pattern);
-            if (match) return match[1];
+        // Partial match (contains)
+        for (const [concept, data] of this.knowledge.entries()) {
+            if (concept.includes(query) || query.includes(concept)) {
+                return data;
+            }
         }
+        
+        // Fuzzy match (similar words)
+        for (const [concept, data] of this.knowledge.entries()) {
+            const conceptWords = concept.split(' ');
+            const queryWords = query.split(' ');
+            const intersection = conceptWords.filter(w => queryWords.includes(w));
+            if (intersection.length >= Math.min(conceptWords.length, queryWords.length) / 2) {
+                return data;
+            }
+        }
+        
         return null;
     }
     
@@ -454,46 +581,75 @@ class UniAI {
         return text.toLowerCase()
             .replace(/[^\w\s]/g, ' ')
             .split(/\s+/)
-            .filter(t => t.length > 0);
+            .filter(t => t.length > 2);
     }
     
-    createEmbedding() {
-        return Array(50).fill(0).map(() => Math.random() - 0.5);
+    simplify(text) {
+        return text.toLowerCase().replace(/[^\w\s]/g, '').trim();
     }
     
     async save() {
         const data = {
             birthTime: this.birthTime,
             knowledge: Array.from(this.knowledge.entries()),
-            conceptAssociations: Array.from(this.conceptAssociations.entries()).map(([k, v]) => [k, Array.from(v.entries())]),
-            vocabularyEmbeddings: Array.from(this.vocabularyEmbeddings.entries()),
+            conceptGraph: Array.from(this.conceptGraph.entries()).map(([k, v]) => [k, Array.from(v.entries())]),
+            contextMemory: Array.from(this.contextMemory.entries()).map(([userId, ctx]) => [
+                userId,
+                {
+                    ...ctx,
+                    topics: Array.from(ctx.topics)
+                }
+            ]),
+            vocabulary: Array.from(this.vocabulary.entries()),
+            phrasePatterns: Array.from(this.phrasePatterns.entries()),
             entityMemory: Array.from(this.entityMemory.entries()),
-            userContext: Array.from(this.userContext.entries()),
-            conversations: this.conversations.slice(-100),
+            conversationHistory: this.conversationHistory.slice(-200),
             stats: this.stats
         };
         
-        await fs.writeFile('uni_brain.json', JSON.stringify(data, null, 2));
+        try {
+            await fs.writeFile('uni_brain.json', JSON.stringify(data, null, 2));
+            console.log(`💾 Saved - ${this.stats.uniqueUsers} users, ${this.knowledge.size} concepts, ${this.stats.accurateResponses} accurate responses`);
+        } catch (error) {
+            console.error('Save failed:', error);
+        }
     }
     
     async load() {
         try {
             const data = JSON.parse(await fs.readFile('uni_brain.json', 'utf8'));
+            
             this.birthTime = data.birthTime;
             this.knowledge = new Map(data.knowledge);
-            this.conceptAssociations = new Map(data.conceptAssociations.map(([k, v]) => [k, new Map(v)]));
-            this.vocabularyEmbeddings = new Map(data.vocabularyEmbeddings);
+            this.conceptGraph = new Map(data.conceptGraph?.map(([k, v]) => [k, new Map(v)]) || []);
+            
+            // Restore context memory
+            if (data.contextMemory) {
+                this.contextMemory = new Map(
+                    data.contextMemory.map(([userId, ctx]) => [
+                        userId,
+                        {
+                            ...ctx,
+                            topics: new Set(ctx.topics || [])
+                        }
+                    ])
+                );
+            }
+            
+            this.vocabulary = new Map(data.vocabulary || []);
+            this.phrasePatterns = new Map(data.phrasePatterns || []);
             this.entityMemory = new Map(data.entityMemory || []);
-            this.userContext = new Map(data.userContext || []);
-            this.conversations = data.conversations || [];
+            this.conversationHistory = data.conversationHistory || [];
             this.stats = data.stats;
-            console.log('✓ Loaded Uni brain');
+            
+            console.log(`✓ Loaded brain - ${this.knowledge.size} concepts, ${this.contextMemory.size} users, ${this.stats.totalConversations} conversations`);
         } catch (error) {
-            console.log('→ Starting fresh');
+            console.log('→ Starting with fresh knowledge base');
         }
     }
 }
 
+// Initialize
 const uni = new UniAI();
 
 // WebSocket
@@ -517,7 +673,7 @@ function broadcast(data) {
     });
 }
 
-// Routes
+// API Routes
 app.post('/api/message', async (req, res) => {
     const { message, userId } = req.body;
     
@@ -525,26 +681,32 @@ app.post('/api/message', async (req, res) => {
         return res.status(400).json({ error: 'Message required' });
     }
     
-    const response = await uni.chat(message, userId);
-    
-    broadcast({
-        type: 'conversation',
-        data: { message, response, stats: uni.stats }
-    });
-    
-    res.json({ response, stats: uni.stats });
+    try {
+        const response = await uni.chat(message, userId || 'anonymous');
+        
+        broadcast({
+            type: 'conversation',
+            data: { message, response, stats: uni.stats }
+        });
+        
+        res.json({ response, stats: uni.stats });
+    } catch (error) {
+        console.error('Chat error:', error);
+        res.status(500).json({ error: 'Internal error' });
+    }
 });
 
 app.get('/api/knowledge', (req, res) => {
     const knowledge = Array.from(uni.knowledge.entries())
         .map(([concept, data]) => ({
             concept,
-            definition: data.definition,
+            definition: data.definition.substring(0, 200),
+            category: data.category,
             occurrences: data.occurrences,
-            type: data.type,
-            associations: uni.conceptAssociations.get(concept)?.size || 0
+            source: data.source
         }))
-        .sort((a, b) => b.occurrences - a.occurrences);
+        .sort((a, b) => b.occurrences - a.occurrences)
+        .slice(0, 50);
     
     res.json({ knowledge, stats: uni.stats });
 });
@@ -553,13 +715,14 @@ app.get('/api/stats', (req, res) => {
     res.json({
         ...uni.stats,
         knowledgeSize: uni.knowledge.size,
-        associationCount: uni.conceptAssociations.size,
-        uptime: Date.now() - uni.birthTime
+        vocabularySize: uni.vocabulary.size,
+        uptime: Date.now() - uni.birthTime,
+        uptimeDays: ((Date.now() - uni.birthTime) / 86400000).toFixed(2)
     });
 });
 
 // Auto-save
-setInterval(() => uni.save(), 60000);
+setInterval(() => uni.save(), 120000); // Every 2 minutes
 
 const server = app.listen(PORT, async () => {
     await uni.load();
@@ -568,6 +731,7 @@ const server = app.listen(PORT, async () => {
 ║   UNI - Real Intelligence          ║
 ║   Port: ${PORT}                        ║
 ║   Knowledge: ${uni.knowledge.size} concepts        ║
+║   Users: ${uni.stats.uniqueUsers}                         ║
 ╚════════════════════════════════════╝
     `);
 });
@@ -579,7 +743,8 @@ server.on('upgrade', (request, socket, head) => {
 });
 
 process.on('SIGINT', async () => {
-    console.log('\n→ Saving...');
+    console.log('\n→ Saving brain...');
     await uni.save();
+    console.log('✓ Goodbye!');
     process.exit(0);
 });
