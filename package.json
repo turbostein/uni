@@ -1,12 +1,22 @@
 {
-  "name": "uni-real-learning-ai",
-  "version": "2.0.0",
-  "description": "Uni - Real Learning AI with actual training capabilities",
+  "name": "uni-hybrid-learning-ai",
+  "version": "3.0.0",
+  "description": "Uni - Hybrid Learning AI that combines LLM reasoning with real-time knowledge acquisition",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node --watch server.js"
   },
-  "keywords": ["ai", "learning", "semantic-network", "knowledge-graph"],
+  "keywords": [
+    "ai",
+    "machine-learning",
+    "knowledge-graph",
+    "real-time-learning",
+    "llm",
+    "hybrid-ai",
+    "vector-embeddings"
+  ],
+  "author": "turbostein",
   "license": "MIT",
   "dependencies": {
     "express": "^4.18.2",
@@ -14,6 +24,10 @@
     "ws": "^8.14.2"
   },
   "engines": {
-    "node": ">=16.0.0"
+    "node": "20.x"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/turbostein/uni"
   }
 }
