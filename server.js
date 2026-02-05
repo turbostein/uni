@@ -644,6 +644,26 @@ app.get('/api/knowledge', (req, res) => {
 app.get('/api/stats', (req, res) => res.json(uni.getStats()));
 app.get('/health', (req, res) => res.json({ status: 'ok', apiMode: !uni.llm.useLocal, stats: uni.getStats() }));
 
+// Protected brain backup endpoint - only accessible with secret key
+app.get('/api/brain-backup', (req, res) => {
+  const secretKey = process.env.BRAIN_BACKUP_KEY || 'turbostein-beyond-uni-2026';
+  if (req.query.key !== secretKey) {
+    return res.status(403).json({ error: 'Unauthorized. Nice try, MasterCock.' });
+  }
+  const brainPath = uni.getBrainPath();
+  res.download(brainPath, 'uni_brain.json');
+});
+
+// View brain as JSON (also protected)
+app.get('/api/brain-view', (req, res) => {
+  const secretKey = process.env.BRAIN_BACKUP_KEY || 'turbostein-beyond-uni-2026';
+  if (req.query.key !== secretKey) {
+    return res.status(403).json({ error: 'Unauthorized. Nice try, MasterCock.' });
+  }
+  const brainPath = uni.getBrainPath();
+  res.sendFile(brainPath);
+});
+
 const server = app.listen(PORT, async () => {
   console.log(`\n🚀 Uni running on port ${PORT}`);
   await uni.load();
